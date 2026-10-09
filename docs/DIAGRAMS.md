@@ -176,3 +176,136 @@ flowchart TD
     style State fill:#f59e0b,color:#333
     style Theme fill:#f59e0b,color:#333
 ```
+
+## 5. CI/CD — Current Deployment (Render + Vercel)
+
+```mermaid
+flowchart TD
+    Dev[👨‍💻 Developer] -->|git push| GH[GitHub Repository<br/>AshmitGoel/SQL-query-agent]
+    
+    GH -->|Webhook trigger| CI[GitHub Actions CI]
+    
+    subgraph CI_Pipeline["🔄 GitHub Actions (ci.yml)"]
+        direction LR
+        subgraph Backend_CI["Backend Checks (parallel)"]
+            Lint[🔍 Ruff Lint]
+            Type1[📝 Pyright Type Check]
+        end
+        subgraph Frontend_CI["Frontend Checks (parallel)"]
+            TSC[📝 TypeScript Check]
+            Build[🏗️ Vite Build]
+        end
+    end
+
+    GH -->|Auto-detect push| Render[☁️ Render]
+    GH -->|Auto-detect push| Vercel[☁️ Vercel]
+    
+    subgraph Render_Deploy["Render (Backend)"]
+        R1[📦 pip install requirements.txt] --> R2[🚀 uvicorn app.main:app]
+        R2 --> R3[🌐 sql-query-agent-api.onrender.com]
+    end
+
+    subgraph Vercel_Deploy["Vercel (Frontend)"]
+        V1[📦 npm ci] --> V2[🏗️ npm run build]
+        V2 --> V3[🌐 sql-query-agent-sigma.vercel.app]
+    end
+
+    Render --> Render_Deploy
+    Vercel --> Vercel_Deploy
+
+    R3 <-->|API Calls| V3
+    R3 -->|Gemini API| Gemini[🤖 Google Gemini]
+
+    style GH fill:#24292e,color:#fff
+    style Render fill:#46e3b7,color:#333
+    style Vercel fill:#000,color:#fff
+    style Gemini fill:#4285f4,color:#fff
+```
+
+## 6. CI/CD — Docker Deployment (Self-Hosted / Cloud VM)
+
+```mermaid
+flowchart TD
+    Dev[👨‍💻 Developer] -->|git push| GH[GitHub Repository]
+    
+    GH -->|Pull code| Server[🖥️ Server / Cloud VM]
+    
+    subgraph Docker["🐳 docker-compose up"]
+        direction TB
+        
+        subgraph Backend_Build["Dockerfile.backend"]
+            B1[FROM python:3.12-slim]
+            B2[pip install requirements.txt]
+            B3[Copy backend/ code]
+            B4[mkdir data/]
+            B1 --> B2 --> B3 --> B4
+        end
+
+        subgraph Frontend_Build["Dockerfile.frontend (multi-stage)"]
+            direction TB
+            subgraph Stage1["Stage 1: Build"]
+                F1[FROM node:20-alpine]
+                F2[npm ci]
+                F3[npm run build → dist/]
+                F1 --> F2 --> F3
+            end
+            subgraph Stage2["Stage 2: Serve"]
+                F4[FROM nginx:alpine]
+                F5[Copy dist/ from Stage 1]
+                F6[Copy nginx.conf]
+                F4 --> F5 --> F6
+            end
+            Stage1 --> Stage2
+        end
+
+        Backend_Container[📦 Backend Container<br/>uvicorn :8000]
+        Frontend_Container[📦 Frontend Container<br/>nginx :80]
+        Volume[(💾 backend-data<br/>SQLite volume)]
+
+        Backend_Build --> Backend_Container
+        Frontend_Build --> Frontend_Container
+        Backend_Container --> Volume
+    end
+
+    subgraph Nginx_Routing["nginx.conf routing"]
+        Route1["/ → index.html<br/>(SPA fallback)"]
+        Route2["/api/* → backend:8000<br/>(reverse proxy)"]
+    end
+
+    Frontend_Container --> Nginx_Routing
+
+    User[👤 User] -->|":80"| Frontend_Container
+    Frontend_Container -->|"/api/*"| Backend_Container
+    Backend_Container -->|API| Gemini[🤖 Gemini]
+
+    style Docker fill:#e3f2fd,color:#333
+    style Backend_Container fill:#3776ab,color:#fff
+    style Frontend_Container fill:#269539,color:#fff
+    style Gemini fill:#4285f4,color:#fff
+```
+
+## 7. Comparison: Current vs Docker Deployment
+
+```mermaid
+flowchart LR
+    subgraph Current["✅ Current Setup (Free)"]
+        direction TB
+        C_FE[Vercel<br/>Static hosting<br/>CDN worldwide] 
+        C_BE[Render<br/>Python server<br/>Free tier]
+        C_DB[(SQLite<br/>On Render disk)]
+        C_FE -->|HTTPS| C_BE
+        C_BE --> C_DB
+    end
+
+    subgraph DockerSetup["🐳 Docker Setup (Self-Hosted)"]
+        direction TB
+        D_FE[nginx container<br/>:80]
+        D_BE[Python container<br/>:8000]
+        D_DB[(SQLite<br/>Docker volume)]
+        D_FE -->|reverse proxy| D_BE
+        D_BE --> D_DB
+    end
+
+    Current -.->|"Pros: Free, auto-deploy,<br/>CDN, zero config"| Current
+    DockerSetup -.->|"Pros: Full control,<br/>run anywhere,<br/>no vendor lock-in"| DockerSetup
+```
