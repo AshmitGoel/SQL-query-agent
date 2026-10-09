@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChat } from './hooks/useChat';
 import { useDarkMode } from './hooks/useDarkMode';
+import { healthCheck } from './api/client';
 import Header from './components/Header';
 import ChatInput from './components/ChatInput';
 import ChatMessage from './components/ChatMessage';
@@ -13,6 +14,11 @@ export default function App() {
   const { isDark, toggle } = useDarkMode();
   const [schemaPanelOpen, setSchemaPanelOpen] = useState(false);
   const [sessionsSidebarOpen, setSessionsSidebarOpen] = useState(false);
+
+  // Warm up the backend server on app load (Render free tier spins down)
+  useEffect(() => {
+    healthCheck().catch(() => {});
+  }, []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
